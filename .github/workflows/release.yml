@@ -1,0 +1,265 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  PROJECT_PATH: GamePriceWatch/GamePriceWatch.csproj
+  # Resolve the version once — tag push uses ref_name, manual dispatch uses input
+  APP_VERSION: ${{ github.ref_name || github.event.inputs.version || 'v1.0.0' }}
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Windows x64 — covers both Intel & AMD processors
+  # Produces: Inno Setup installer (.exe) + portable ZIP
+  # ──────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Publish self-contained (win-x64)
+        run: |
+          $version = "${{ env.APP_VERSION }}" -replace '^v', ''
+          dotnet publish ${{ env.PROJECT_PATH }} `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:Version=$version `
+            -o ./publish/win-x64
+        shell: pwsh
+
+      - name: Create Windows Installer (Inno Setup)
+        run: |
+          choco install innosetup -y --no-progress
+          $version = "${{ env.APP_VERSION }}" -replace '^v', ''
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="$version" /DPublishDir="publish\win-x64" installer.iss
+        shell: pwsh
+
+      - name: Create portable ZIP
+        run: |
+          Compress-Archive -Path ./publish/win-x64/* -DestinationPath ./GamePriceWatch-Windows-x64.zip
+        shell: pwsh
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: ./Output/GamePriceWatch-Setup.exe
+          if-no-files-found: error
+
+      - name: Upload Windows portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: ./GamePriceWatch-Windows-x64.zip
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────
+  # Ubuntu/Debian .deb package (x64)
+  # This is a WPF app, so it runs via Wine on Linux.
+  # The .deb installs Wine as a dependency and wraps
+  # the .exe in a launcher script.
+  # ──────────────────────────────────────────────
+  build-linux-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      # Build Windows exe on Linux (cross-compile for win-x64)
+      # WPF apps cannot run natively on Linux, so we cross-compile
+      # the Windows binary and wrap it with Wine.
+      - name: Cross-compile for win-x64
+        run: |
+          VERSION="${{ env.APP_VERSION }}"
+          VERSION="${VERSION#v}"
+          dotnet publish ${{ env.PROJECT_PATH }} \
+            -c Release \
+            -r win-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:Version=${VERSION} \
+            -o ./publish/win-x64
+
+      - name: Build .deb package
+        run: |
+          VERSION="${{ env.APP_VERSION }}"
+          VERSION="${VERSION#v}"
+
+          PKG_ROOT="deb-package"
+
+          # Directory structure
+          mkdir -p ${PKG_ROOT}/DEBIAN
+          mkdir -p ${PKG_ROOT}/opt/gamepricewatch
+          mkdir -p ${PKG_ROOT}/usr/local/bin
+          mkdir -p ${PKG_ROOT}/usr/share/applications
+
+          # Copy the self-contained Windows exe into /opt
+          cp ./publish/win-x64/GamePriceWatch.exe ${PKG_ROOT}/opt/gamepricewatch/
+
+          # Create a launcher script that invokes Wine
+          cat > ${PKG_ROOT}/usr/local/bin/gamepricewatch << 'LAUNCHER'
+          #!/usr/bin/env bash
+          # Game Price Watch — WPF application running via Wine
+          WINEPREFIX="${HOME}/.local/share/gamepricewatch/wine" \
+            wine /opt/gamepricewatch/GamePriceWatch.exe "$@"
+          LAUNCHER
+          chmod +x ${PKG_ROOT}/usr/local/bin/gamepricewatch
+
+          # Debian control file
+          cat > ${PKG_ROOT}/DEBIAN/control << EOF
+          Package: gamepricewatch
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Depends: wine64 | wine
+          Installed-Size: $(du -sk ${PKG_ROOT}/opt | cut -f1)
+          Maintainer: horaceV1 <https://github.com/horaceV1>
+          Homepage: https://github.com/horaceV1/GamePriceWatch
+          Description: Game Price Watch
+           Track the cheapest game prices from AllKeyShop.
+           Shows TOP 50 popular games with the 5 best store offers.
+           .
+           This is a Windows WPF application packaged to run on
+           Ubuntu/Debian via Wine.
+          EOF
+
+          # Post-install: initialize Wine prefix silently
+          cat > ${PKG_ROOT}/DEBIAN/postinst << 'POSTINST'
+          #!/bin/bash
+          echo "Game Price Watch installed. Run 'gamepricewatch' to start."
+          echo "Note: Wine will initialize on first launch (this may take a moment)."
+          POSTINST
+          chmod 755 ${PKG_ROOT}/DEBIAN/postinst
+
+          # Desktop entry
+          cat > ${PKG_ROOT}/usr/share/applications/gamepricewatch.desktop << EOF
+          [Desktop Entry]
+          Name=Game Price Watch
+          Comment=Track the cheapest game prices from AllKeyShop
+          Exec=gamepricewatch
+          Terminal=false
+          Type=Application
+          Categories=Utility;Game;
+          EOF
+
+          # Build the .deb
+          dpkg-deb --root-owner-group --build ${PKG_ROOT} ./gamepricewatch_${VERSION}_amd64.deb
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: ./*.deb
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────
+  # Create GitHub Release with all installers
+  # ──────────────────────────────────────────────
+  release:
+    needs: [build-windows, build-linux-deb]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # For workflow_dispatch: create & push the tag if it doesn't exist
+      - name: Ensure tag exists
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag "${{ env.APP_VERSION }}" || true
+          git push origin "${{ env.APP_VERSION }}" || true
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          merge-multiple: false
+
+      - name: List downloaded artifacts
+        run: find ./artifacts -type f | sort
+
+      # Flatten all files into a single release-assets folder
+      # so the upload paths are predictable
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find ./artifacts -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.deb' \) -exec cp {} release-assets/ \;
+          echo "=== Release assets ==="
+          ls -la release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.APP_VERSION }}
+          name: "Game Price Watch ${{ env.APP_VERSION }}"
+          body: |
+            ## 🎮 Game Price Watch ${{ env.APP_VERSION }}
+
+            Track the cheapest game prices from AllKeyShop — TOP 50 popular games with the 5 best store offers.
+
+            ### Downloads
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | 🪟 Windows x64 (Intel & AMD) | `GamePriceWatch-Setup.exe` | Installer (recommended) |
+            | 🪟 Windows x64 (Intel & AMD) | `GamePriceWatch-Windows-x64.zip` | Portable — extract & run |
+            | 🐧 Ubuntu / Debian x64 | `gamepricewatch_*_amd64.deb` | `.deb` package (uses Wine) |
+
+            ### Installation
+
+            #### Windows
+            - **Installer**: Download `GamePriceWatch-Setup.exe`, run it, and follow the prompts.
+            - **Portable**: Download the `.zip`, extract anywhere, and run `GamePriceWatch.exe`.
+
+            #### Ubuntu / Debian
+            ```bash
+            # Install the .deb (will pull Wine as a dependency)
+            sudo dpkg -i gamepricewatch_*_amd64.deb
+            sudo apt-get install -f   # resolve dependencies if needed
+
+            # Launch
+            gamepricewatch
+            ```
+
+            ### Requirements
+            - **Windows**: Windows 10 or later (x64) — self-contained, no .NET install needed
+            - **Linux**: Ubuntu 22.04+ or Debian 12+ with Wine — `sudo apt install wine64`
+          draft: false
+          prerelease: false
+          files: release-assets/*
+          fail_on_unmatched_files: true
