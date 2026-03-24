@@ -50,26 +50,33 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
           $version = "${{ env.APP_VERSION }}" -replace '^v', ''
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="$version" /DPublishDir="publish\win-x64" installer.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="$version" /DPublishDir="publish\win-x64" /O"Output" installer.iss
+
+      - name: Verify build outputs
+        run: |
+          Write-Host "=== Publish directory ==="
+          Get-ChildItem -Path publish/win-x64 -Name | Select-Object -First 10
+          Write-Host "=== Installer output ==="
+          Get-ChildItem -Path Output -Recurse -Name
         shell: pwsh
 
       - name: Create portable ZIP
         run: |
-          Compress-Archive -Path publish/win-x64/* -DestinationPath ./GamePriceWatch-Windows-x64.zip
+          Compress-Archive -Path publish/win-x64/* -DestinationPath GamePriceWatch-Windows-x64.zip
         shell: pwsh
 
       - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: ./Output/GamePriceWatch-Setup.exe
+          path: Output/GamePriceWatch-Setup.exe
           if-no-files-found: error
 
       - name: Upload Windows portable artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-portable
-          path: ./GamePriceWatch-Windows-x64.zip
+          path: GamePriceWatch-Windows-x64.zip
           if-no-files-found: error
 
   # ──────────────────────────────────────────────
