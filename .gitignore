@@ -1,0 +1,30 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.vs/
+.vs/
+
+## IDE
+.idea/
+*.sln.ide/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+## NuGet
+*.nupkg
+**/packages/*
+
+## Rider
+.idea/
+
+## Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
