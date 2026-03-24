@@ -32,9 +32,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore dependencies
-        run: dotnet restore ${{ env.PROJECT_PATH }}
-
       - name: Publish self-contained (win-x64)
         run: |
           $version = "${{ env.APP_VERSION }}" -replace '^v', ''
@@ -46,7 +43,7 @@ jobs:
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:EnableCompressionInSingleFile=true `
             -p:Version=$version `
-            -o ./publish/win-x64
+            -o publish/win-x64
         shell: pwsh
 
       - name: Create Windows Installer (Inno Setup)
@@ -58,7 +55,7 @@ jobs:
 
       - name: Create portable ZIP
         run: |
-          Compress-Archive -Path ./publish/win-x64/* -DestinationPath ./GamePriceWatch-Windows-x64.zip
+          Compress-Archive -Path publish/win-x64/* -DestinationPath ./GamePriceWatch-Windows-x64.zip
         shell: pwsh
 
       - name: Upload Windows installer artifact
@@ -91,9 +88,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore dependencies
-        run: dotnet restore ${{ env.PROJECT_PATH }}
-
       # Build Windows exe on Linux (cross-compile for win-x64)
       # WPF apps cannot run natively on Linux, so we cross-compile
       # the Windows binary and wrap it with Wine.
@@ -108,6 +102,7 @@ jobs:
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:EnableCompressionInSingleFile=true \
+            -p:EnableWindowsTargeting=true \
             -p:Version=${VERSION} \
             -o ./publish/win-x64
 
