@@ -53,16 +53,13 @@ jobs:
         run: choco install innosetup -y --no-progress
 
       - name: Create Windows Installer (Inno Setup)
+        shell: cmd
         run: |
-          $version = "${{ env.APP_VERSION }}" -replace '^v', ''
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          $publishDir = Join-Path $env:GITHUB_WORKSPACE "publish\win-x64"
-          Write-Host "Publish dir: $publishDir"
-          Write-Host "Files in publish dir:"
-          Get-ChildItem $publishDir -Name | Select-Object -First 5
-          Write-Host "Running ISCC..."
-          & $iscc /DMyAppVersion="$version" /DPublishDir="$publishDir" installer.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          set VERSION=${{ env.APP_VERSION }}
+          set VERSION=%VERSION:v=%
+          echo Publish dir: %cd%\publish\win-x64
+          dir publish\win-x64
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=%VERSION% /DPublishDir="%cd%\publish\win-x64" "%cd%\installer.iss"
 
       - name: Verify build outputs
         run: |
