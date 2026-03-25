@@ -47,38 +47,38 @@ jobs:
             -p:EnableCompressionInSingleFile=true `
             -p:Version=$version `
             -o publish\win-x64
-          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
-      - name: Install Inno Setup
-        run: choco install innosetup -y --no-progress
+      - name: Download and install Inno Setup
+        run: |
+          $url = "https://jrsoftware.org/download.php/is.exe"
+          $installer = "$env:TEMP\innosetup.exe"
+          Write-Host "Downloading Inno Setup..."
+          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+          Write-Host "Installing Inno Setup silently..."
+          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\InnoSetup" -Wait -NoNewWindow
+          Write-Host "Installed. Contents:"
+          Get-ChildItem "C:\InnoSetup" -Name | Select-Object -First 15
 
       - name: Create Windows Installer (Inno Setup)
-        shell: cmd
         run: |
-          set VERSION=${{ env.APP_VERSION }}
-          set VERSION=%VERSION:v=%
-          set PUBLISH_DIR=%cd%\publish\win-x64
-          echo Publish dir: %PUBLISH_DIR%
-          dir "%PUBLISH_DIR%"
-          echo.
-          echo Running ISCC with verbose output...
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /V9 /DMyAppVersion=%VERSION% "/DPublishDir=%PUBLISH_DIR%" "%cd%\installer.iss"
-          if errorlevel 1 (
-            echo ISCC failed with exit code %errorlevel%
-            exit /b 1
-          )
-
-      - name: Verify build outputs
-        run: |
-          Write-Host "=== Publish directory ==="
-          Get-ChildItem publish\win-x64 -Name | Select-Object -First 10
-          Write-Host "=== Installer output ==="
-          if (Test-Path Output) {
-            Get-ChildItem Output -Recurse
-          } else {
-            Write-Error "Output directory does not exist!"
-            Get-ChildItem -Recurse -Filter "GamePriceWatch-Setup*" | Select-Object FullName
-            exit 1
+          $version = "${{ env.APP_VERSION }}" -replace '^v', ''
+          $iscc = "C:\InnoSetup\ISCC.exe"
+          $publishDir = (Resolve-Path "publish\win-x64").Path
+          $issFile = (Resolve-Path "installer.iss").Path
+          Write-Host "ISCC: $iscc"
+          Write-Host "ISS file: $issFile"
+          Write-Host "PublishDir: $publishDir"
+          $proc = Start-Process -FilePath $iscc `
+            -ArgumentList "/DMyAppVersion=$version", "/DPublishDir=$publishDir", $issFile `
+            -Wait -NoNewWindow -PassThru `
+            -RedirectStandardOutput "iscc_stdout.txt" `
+            -RedirectStandardError "iscc_stderr.txt"
+          Get-Content "iscc_stdout.txt"
+          $stderr = Get-Content "iscc_stderr.txt" -ErrorAction SilentlyContinue
+          if ($stderr) { Write-Host "STDERR: $stderr" }
+          if ($proc.ExitCode -ne 0) {
+            throw "ISCC failed with exit code $($proc.ExitCode)"
           }
 
       - name: Create portable ZIP
