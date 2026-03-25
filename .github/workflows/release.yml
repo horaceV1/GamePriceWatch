@@ -57,9 +57,16 @@ jobs:
         run: |
           set VERSION=${{ env.APP_VERSION }}
           set VERSION=%VERSION:v=%
-          echo Publish dir: %cd%\publish\win-x64
-          dir publish\win-x64
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=%VERSION% /DPublishDir="%cd%\publish\win-x64" "%cd%\installer.iss"
+          set PUBLISH_DIR=%cd%\publish\win-x64
+          echo Publish dir: %PUBLISH_DIR%
+          dir "%PUBLISH_DIR%"
+          echo.
+          echo Running ISCC with verbose output...
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /V9 /DMyAppVersion=%VERSION% "/DPublishDir=%PUBLISH_DIR%" "%cd%\installer.iss"
+          if errorlevel 1 (
+            echo ISCC failed with exit code %errorlevel%
+            exit /b 1
+          )
 
       - name: Verify build outputs
         run: |
