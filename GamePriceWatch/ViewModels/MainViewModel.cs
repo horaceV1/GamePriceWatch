@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Windows;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -19,7 +21,16 @@ public partial class MainViewModel : ObservableObject
     private GameInfo? _selectedGame;
 
     [ObservableProperty]
+    private ObservableCollection<StorePrice> _selectedGamePrices = new();
+
+    [ObservableProperty]
     private bool _isLoading;
+
+    [ObservableProperty]
+    private bool _isLoadingPrices;
+
+    [ObservableProperty]
+    private bool _showDetail;
 
     [ObservableProperty]
     private string _statusText = "Ready";
@@ -31,12 +42,17 @@ public partial class MainViewModel : ObservableObject
     private int _progressValue;
 
     [ObservableProperty]
-    private int _progressMax = 20;
+    private int _progressMax = 50;
+
+    [ObservableProperty]
+    private string _selectedGameCoverUrl = "";
+
+    [ObservableProperty]
+    private string _selectedGamePriceRange = "";
 
     public MainViewModel()
     {
         _scraperService = new ScraperService();
-
         _autoRefreshTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromHours(1)
@@ -45,14 +61,32 @@ public partial class MainViewModel : ObservableObject
         _autoRefreshTimer.Start();
     }
 
+    partial void OnSelectedGameChanged(GameInfo? value)
+    {
+        if (value != null)
+        {
+            ShowDetail = true;
+            _ = LoadGamePricesAsync(value);
+        }
+        else
+        {
+            ShowDetail = false;
+            SelectedGamePrices.Clear();
+            SelectedGameCoverUrl = "";
+            SelectedGamePriceRange = "";
+        }
+    }
+
     [RelayCommand]
     private async Task LoadGamesAsync()
     {
         if (IsLoading) return;
 
         IsLoading = true;
-        StatusText = "Fetching latest game releases...";
+        StatusText = "Fetching AllKeyShop TOP 50 Popular...";
         ProgressValue = 0;
+        SelectedGame = null;
+        ShowDetail = false;
 
         try
         {
@@ -63,7 +97,7 @@ public partial class MainViewModel : ObservableObject
                 StatusText = p.message;
             });
 
-            var games = await _scraperService.GetLatestGamesWithPricesAsync(progress);
+            var games = await _scraperService.GetTop50GamesAsync(progress);
 
             Games.Clear();
             foreach (var game in games)
@@ -72,7 +106,7 @@ public partial class MainViewModel : ObservableObject
             }
 
             LastUpdated = DateTime.Now.ToString("HH:mm:ss dd/MM/yyyy");
-            StatusText = $"Loaded {games.Count} games successfully";
+            StatusText = $"Loaded {games.Count} games from TOP 50 Popular";
         }
         catch (Exception ex)
         {
@@ -82,6 +116,64 @@ public partial class MainViewModel : ObservableObject
         {
             IsLoading = false;
         }
+    }
+
+    private async Task LoadGamePricesAsync(GameInfo game)
+    {
+        if (game.HasLoadedPrices)
+        {
+            SelectedGamePrices.Clear();
+            foreach (var p in game.StorePrices)
+                SelectedGamePrices.Add(p);
+            SelectedGameCoverUrl = game.CoverImageUrl;
+            SelectedGamePriceRange = game.PriceRange;
+            StatusText = $"Showing {game.StorePrices.Count} best offers for {game.Name}";
+            return;
+        }
+
+        IsLoadingPrices = true;
+        SelectedGamePrices.Clear();
+        SelectedGameCoverUrl = "";
+        SelectedGamePriceRange = "";
+        StatusText = $"Loading store prices for {game.Name}...";
+
+        try
+        {
+            var detail = await _scraperService.GetGameDetailAsync(game.PageUrl);
+            game.StorePrices = detail.Prices;
+            game.CoverImageUrl = detail.CoverImageUrl;
+            game.PriceRange = detail.PriceRange;
+            game.HasLoadedPrices = true;
+
+            // Only update if this game is still selected
+            if (SelectedGame == game)
+            {
+                foreach (var p in detail.Prices)
+                    SelectedGamePrices.Add(p);
+                SelectedGameCoverUrl = detail.CoverImageUrl;
+                SelectedGamePriceRange = detail.PriceRange;
+
+                if (!string.IsNullOrEmpty(detail.ErrorMessage))
+                    StatusText = $"Error: {detail.ErrorMessage}";
+                else
+                    StatusText = $"Found {detail.Prices.Count} offers for {game.Name}";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error loading prices: {ex.Message}";
+        }
+        finally
+        {
+            IsLoadingPrices = false;
+        }
+    }
+
+    [RelayCommand]
+    private void BackToList()
+    {
+        SelectedGame = null;
+        ShowDetail = false;
     }
 
     [RelayCommand]
@@ -99,6 +191,23 @@ public partial class MainViewModel : ObservableObject
                 System.Diagnostics.Process.Start(psi);
             }
             catch { }
+        }
+    }
+
+    [RelayCommand]
+    private void CopyCoupon(string? couponCode)
+    {
+        if (!string.IsNullOrEmpty(couponCode))
+        {
+            try
+            {
+                Clipboard.SetText(couponCode);
+                StatusText = $"Copied coupon code: {couponCode}";
+            }
+            catch
+            {
+                StatusText = "Failed to copy coupon code";
+            }
         }
     }
 }

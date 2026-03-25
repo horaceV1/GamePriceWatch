@@ -5,20 +5,19 @@
         xmlns:vm="clr-namespace:GamePriceWatch.ViewModels"
         xmlns:converters="clr-namespace:GamePriceWatch.Converters"
         Title="Game Price Watch"
-        Height="800" Width="1200"
-        MinHeight="600" MinWidth="900"
+        Height="850" Width="1300"
+        MinHeight="650" MinWidth="1000"
         WindowStartupLocation="CenterScreen"
         ExtendsContentIntoTitleBar="True">
-
     <ui:FluentWindow.DataContext>
         <vm:MainViewModel />
     </ui:FluentWindow.DataContext>
-
     <ui:FluentWindow.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <converters:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <converters:NonZeroPriceToVisibilityConverter x:Key="NonZeroPriceToVis" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </ui:FluentWindow.Resources>
-
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -29,240 +28,415 @@
         <!-- Title Bar -->
         <ui:TitleBar Grid.Row="0" Title="Game Price Watch" ShowMaximize="True" ShowMinimize="True" />
 
-        <!-- Main Content -->
-        <Grid Grid.Row="1" Margin="16,8,16,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <!-- Main Content: Master-Detail -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="420" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-            <!-- Header -->
-            <Grid Grid.Row="0" Margin="0,0,0,12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <!-- LEFT PANEL: Game List -->
+            <Grid Grid.Column="0" Margin="12,8,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Vertical">
-                    <TextBlock Text="&#x1F3AE; Game Price Watch" FontSize="28" FontWeight="Bold" />
-                    <TextBlock FontSize="13" Opacity="0.6" Margin="0,2,0,0">
-                        <Run Text="Tracking the latest 20 game releases from AllKeyShop &#x2022; Last updated: " />
-                        <Run Text="{Binding LastUpdated}" />
-                    </TextBlock>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:Button Content="Refresh Now"
+                <!-- Header -->
+                <Grid Grid.Row="0" Margin="4,0,4,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="🔥 TOP 50 Popular" FontSize="22" FontWeight="Bold" />
+                        <TextBlock FontSize="11" Opacity="0.5" Margin="0,2,0,0">
+                            <Run Text="Updated: " />
+                            <Run Text="{Binding LastUpdated}" />
+                        </TextBlock>
+                    </StackPanel>
+                    <ui:Button Grid.Column="1" Content="Refresh"
                                Icon="{ui:SymbolIcon ArrowSync24}"
                                Command="{Binding LoadGamesCommand}"
                                Appearance="Primary"
-                               Margin="0,0,0,0"
-                               Padding="16,10" FontSize="13" />
-                </StackPanel>
-            </Grid>
+                               Padding="12,6" FontSize="12"
+                               VerticalAlignment="Top" />
+                </Grid>
 
-            <!-- Progress Bar (visible when loading) -->
-            <Grid Grid.Row="1" Margin="0,0,0,8"
-                  Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel>
-                    <ProgressBar Value="{Binding ProgressValue}" Maximum="{Binding ProgressMax}"
-                                 Height="4" Margin="0,0,0,4" />
-                    <TextBlock Text="{Binding StatusText}" FontSize="12" Opacity="0.7" />
-                </StackPanel>
-            </Grid>
+                <!-- Progress -->
+                <ProgressBar Grid.Row="1" Value="{Binding ProgressValue}" Maximum="{Binding ProgressMax}"
+                             Height="3" Margin="4,0,4,6"
+                             Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}" />
 
-            <!-- Games List -->
-            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl ItemsSource="{Binding Games}">
-                    <ItemsControl.ItemTemplate>
+                <!-- Game List -->
+                <ListBox Grid.Row="2"
+                         ItemsSource="{Binding Games}"
+                         SelectedItem="{Binding SelectedGame}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,2" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6"
+                                                Padding="10,8" Margin="2,0,6,0" Cursor="Hand">
+                                            <ContentPresenter />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background"
+                                                        Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background"
+                                                        Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                                                <Setter TargetName="Bd" Property="BorderBrush"
+                                                        Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                                <Setter TargetName="Bd" Property="BorderThickness" Value="0,0,3,0" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Margin="0,0,0,10"
-                                    Padding="16">
+                            <Grid Height="56">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Rank -->
+                                <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                                           FontSize="14" FontWeight="Bold" Opacity="0.4"
+                                           Text="{Binding Rank, StringFormat='{}{0:D2}.'}" />
+
+                                <!-- Thumbnail from sprite -->
+                                <Border Grid.Column="1" Width="60" Height="28" CornerRadius="4"
+                                        Background="#1a1a2e" Margin="0,0,8,0" ClipToBounds="True">
+                                    <Image Source="{Binding ThumbnailImage}" Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                </Border>
+
+                                <!-- Name + Store -->
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="4,0,8,0">
+                                    <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding CheapestStore}" FontSize="11" Opacity="0.5" />
+                                        <TextBlock Text=" · " FontSize="11" Opacity="0.3" />
+                                        <TextBlock Text="{Binding Platform}" FontSize="10" Opacity="0.35"
+                                                   FontWeight="Medium" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Price -->
+                                <TextBlock Grid.Column="3" Text="{Binding CheapestPrice}"
+                                           VerticalAlignment="Center" HorizontalAlignment="Right"
+                                           FontSize="15" FontWeight="Bold" Foreground="#2ECC71"
+                                           Margin="0,0,4,0" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Empty state overlay -->
+                <StackPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding Games.Count}" Value="0" />
+                                        <Condition Binding="{Binding IsLoading}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="🎮" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,8" />
+                    <TextBlock Text="No games loaded" FontSize="16" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" Margin="0,0,0,6" />
+                    <TextBlock Text="Click Refresh to load the TOP 50 Popular games" FontSize="12" Opacity="0.5"
+                               HorizontalAlignment="Center" Margin="0,0,0,12" />
+                    <ui:Button Content="Load TOP 50"
+                               Icon="{ui:SymbolIcon Play24}"
+                               Appearance="Primary"
+                               Command="{Binding LoadGamesCommand}"
+                               HorizontalAlignment="Center"
+                               Padding="18,8" FontSize="13" />
+                </StackPanel>
+            </Grid>
+
+            <!-- SEPARATOR -->
+            <Border Grid.Column="0" HorizontalAlignment="Right" Width="1"
+                    Background="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,8,0,0" />
+
+            <!-- RIGHT PANEL: Game Detail Dashboard -->
+            <Grid Grid.Column="1" Margin="16,8,16,0">
+                <!-- No selection state -->
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Visibility="{Binding ShowDetail, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}">
+                    <TextBlock Text="🔍" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,8" />
+                    <TextBlock Text="Select a game" FontSize="18" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" Opacity="0.6" />
+                    <TextBlock Text="Click on a game to see the cheapest store offers"
+                               FontSize="12" Opacity="0.4" HorizontalAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+
+                <!-- Detail view -->
+                <Grid Visibility="{Binding ShowDetail, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Game Header Card -->
+                    <Border Grid.Row="0" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="10" Padding="20" Margin="0,0,0,12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Game Image (cover from detail page, or sprite thumbnail) -->
+                            <Border Grid.Column="0" Width="90" Height="90" CornerRadius="8"
+                                    Background="#1a1a2e" ClipToBounds="True" Margin="0,0,16,0">
+                                <!-- Show cover image if available, otherwise sprite thumbnail -->
                                 <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <!-- Game Header -->
-                                    <Grid Grid.Row="0" Margin="0,0,0,10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Grid.Column="0">
-                                            <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold"
-                                                       TextWrapping="Wrap" />
-                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                <Border Background="#2980B9" CornerRadius="4" Padding="8,3"
-                                                        Margin="0,0,8,0">
-                                                    <TextBlock Text="{Binding Platform}" Foreground="White"
-                                                               FontSize="11" FontWeight="Medium" />
-                                                </Border>
-                                                <Border Background="#7F8C8D" CornerRadius="4" Padding="8,3"
-                                                        Margin="0,0,8,0"
-                                                        Visibility="{Binding ReleaseDate, Converter={StaticResource NullToVisibility}}">
-                                                    <TextBlock Text="{Binding ReleaseDate}" Foreground="White"
-                                                               FontSize="11" />
-                                                </Border>
-                                                <Border Background="#27AE60" CornerRadius="4" Padding="8,3"
-                                                        Visibility="{Binding HistoricalLow, Converter={StaticResource NullToVisibility}}">
-                                                    <TextBlock Foreground="White" FontSize="11">
-                                                        <Run Text="Historical Low: " />
-                                                        <Run Text="{Binding HistoricalLow, Mode=OneWay}" />
-                                                    </TextBlock>
-                                                </Border>
-                                            </StackPanel>
-                                        </StackPanel>
-
-                                        <ui:HyperlinkButton Grid.Column="1"
-                                                            NavigateUri="{Binding PageUrl}"
-                                                            Content="View on AllKeyShop"
-                                                            VerticalAlignment="Top"
-                                                            FontSize="12" />
-                                    </Grid>
-
-                                    <!-- Store Prices Table -->
-                                    <Border Grid.Row="1" Background="{DynamicResource SubtleFillColorSecondaryBrush}"
-                                            CornerRadius="6" Padding="0">
-                                        <Grid>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-
-                                            <!-- Table Header -->
-                                            <Grid Grid.Row="0" Margin="12,8,12,4">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="40" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="100" />
-                                                    <ColumnDefinition Width="120" />
-                                                    <ColumnDefinition Width="100" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="#" FontWeight="SemiBold"
-                                                           FontSize="12" Opacity="0.5" />
-                                                <TextBlock Grid.Column="1" Text="STORE" FontWeight="SemiBold"
-                                                           FontSize="12" Opacity="0.5" />
-                                                <TextBlock Grid.Column="2" Text="REGION" FontWeight="SemiBold"
-                                                           FontSize="12" Opacity="0.5" />
-                                                <TextBlock Grid.Column="3" Text="EDITION" FontWeight="SemiBold"
-                                                           FontSize="12" Opacity="0.5" />
-                                                <TextBlock Grid.Column="4" Text="PRICE" FontWeight="SemiBold"
-                                                           FontSize="12" Opacity="0.5"
-                                                           HorizontalAlignment="Right" />
-                                            </Grid>
-
-                                            <!-- Price Rows -->
-                                            <ItemsControl Grid.Row="1" ItemsSource="{Binding StorePrices}"
-                                                          Margin="0,0,0,4">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Padding="12,8" Margin="4,1,4,0"
-                                                                Background="{DynamicResource SubtleFillColorTertiaryBrush}"
-                                                                CornerRadius="4">
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="40" />
-                                                                    <ColumnDefinition Width="*" />
-                                                                    <ColumnDefinition Width="100" />
-                                                                    <ColumnDefinition Width="120" />
-                                                                    <ColumnDefinition Width="100" />
-                                                                </Grid.ColumnDefinitions>
-
-                                                                <!-- Store Name -->
-                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                                    <TextBlock Text="{Binding StoreName}"
-                                                                               FontWeight="Medium" FontSize="13" />
-                                                                    <TextBlock Text="{Binding StoreRating}"
-                                                                               FontSize="10" Opacity="0.5"
-                                                                               Visibility="{Binding StoreRating, Converter={StaticResource NullToVisibility}}" />
-                                                                </StackPanel>
-
-                                                                <!-- Region -->
-                                                                <TextBlock Grid.Column="2" Text="{Binding Region}"
-                                                                           VerticalAlignment="Center"
-                                                                           FontSize="12" Opacity="0.7" />
-
-                                                                <!-- Edition -->
-                                                                <TextBlock Grid.Column="3" Text="{Binding Edition}"
-                                                                           VerticalAlignment="Center"
-                                                                           FontSize="12" Opacity="0.7" />
-
-                                                                <!-- Price -->
-                                                                <TextBlock Grid.Column="4" Text="{Binding Price}"
-                                                                           VerticalAlignment="Center"
-                                                                           HorizontalAlignment="Right"
-                                                                           FontSize="15" FontWeight="Bold"
-                                                                           Foreground="#2ECC71" />
-                                                            </Grid>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-
-                                            <!-- No prices message -->
-                                            <TextBlock Grid.Row="1"
-                                                       Text="No store prices available for this game."
-                                                       FontSize="12" Opacity="0.5"
-                                                       HorizontalAlignment="Center"
-                                                       Margin="0,12,0,12">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding StorePrices.Count}" Value="0">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </Grid>
-                                    </Border>
+                                    <Image Source="{Binding SelectedGameCoverUrl}" Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                           Visibility="{Binding SelectedGameCoverUrl, Converter={StaticResource NullToVisibility}}" />
+                                    <Image Source="{Binding SelectedGame.ThumbnailImage}" Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                           Visibility="{Binding SelectedGameCoverUrl, Converter={StaticResource NullToVisibility}, ConverterParameter=Invert}" />
                                 </Grid>
                             </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
 
-            <!-- Empty state -->
-            <StackPanel Grid.Row="2"
-                        HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel.Style>
-                    <Style TargetType="StackPanel">
-                        <Setter Property="Visibility" Value="Collapsed" />
-                        <Style.Triggers>
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding Games.Count}" Value="0" />
-                                    <Condition Binding="{Binding IsLoading}" Value="False" />
-                                </MultiDataTrigger.Conditions>
-                                <Setter Property="Visibility" Value="Visible" />
-                            </MultiDataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </StackPanel.Style>
-                <TextBlock Text="&#x1F3AE;" FontSize="64" HorizontalAlignment="Center" Margin="0,0,0,12" />
-                <TextBlock Text="No games loaded yet" FontSize="20" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" Margin="0,0,0,8" />
-                <TextBlock Text="Click 'Refresh Now' to fetch the latest prices from AllKeyShop"
-                           FontSize="13" Opacity="0.6" HorizontalAlignment="Center" Margin="0,0,0,16" />
-                <ui:Button Content="Load Games"
-                           Icon="{ui:SymbolIcon Play24}"
-                           Appearance="Primary"
-                           Command="{Binding LoadGamesCommand}"
-                           HorizontalAlignment="Center"
-                           Padding="24,12" FontSize="14" />
-            </StackPanel>
+                            <!-- Game Info -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding SelectedGame.Name}" FontSize="24" FontWeight="Bold"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <Border Background="#2980B9" CornerRadius="4" Padding="10,4" Margin="0,0,8,0">
+                                        <TextBlock Foreground="White" FontSize="11" FontWeight="Medium">
+                                            <Run Text="Rank #" />
+                                            <Run Text="{Binding SelectedGame.Rank, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </Border>
+                                    <Border Background="#27AE60" CornerRadius="4" Padding="10,4" Margin="0,0,8,0">
+                                        <TextBlock Foreground="White" FontSize="11" FontWeight="Medium">
+                                            <Run Text="Best: " />
+                                            <Run Text="{Binding SelectedGame.CheapestPrice, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </Border>
+                                    <Border Background="#8E44AD" CornerRadius="4" Padding="10,4" Margin="0,0,8,0">
+                                        <TextBlock Foreground="White" FontSize="11" FontWeight="Medium"
+                                                   Text="{Binding SelectedGame.CheapestStore}" />
+                                    </Border>
+                                    <Border Background="#34495E" CornerRadius="4" Padding="10,4"
+                                            Visibility="{Binding SelectedGame.Platform, Converter={StaticResource NullToVisibility}}">
+                                        <TextBlock Foreground="#BDC3C7" FontSize="11" FontWeight="Medium"
+                                                   Text="{Binding SelectedGame.Platform}" />
+                                    </Border>
+                                </StackPanel>
+                                <!-- Price Range -->
+                                <TextBlock FontSize="11" Opacity="0.45" Margin="0,6,0,0"
+                                           Text="{Binding SelectedGamePriceRange}"
+                                           Visibility="{Binding SelectedGamePriceRange, Converter={StaticResource NullToVisibility}}" />
+                            </StackPanel>
+
+                            <!-- Open link button -->
+                            <ui:Button Grid.Column="2" VerticalAlignment="Top"
+                                       Content="AllKeyShop ↗"
+                                       Command="{Binding OpenGameUrlCommand}"
+                                       Appearance="Secondary"
+                                       Padding="12,6" FontSize="12" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Section Title -->
+                    <StackPanel Grid.Row="1" Margin="4,0,0,8">
+                        <TextBlock Text="Top Store Offers" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="Cheapest offers across verified stores • Prices in EUR"
+                                   FontSize="11" Opacity="0.4" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- Loading prices indicator -->
+                    <StackPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Visibility="{Binding IsLoadingPrices, Converter={StaticResource BoolToVisibility}}">
+                        <ProgressBar IsIndeterminate="True" Width="200" Height="3" Margin="0,0,0,8" />
+                        <TextBlock Text="Loading store offers..." FontSize="13" Opacity="0.6"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- Store Offers List -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding IsLoadingPrices, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}">
+                        <ItemsControl ItemsSource="{Binding SelectedGamePrices}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1" CornerRadius="8"
+                                            Padding="16,14" Margin="0,0,0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Store Info -->
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding StoreName}" FontSize="15" FontWeight="SemiBold" />
+                                                    <!-- Official badge -->
+                                                    <Border Background="#1565C0" CornerRadius="3" Padding="6,1" Margin="8,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Visibility="{Binding IsOfficial, Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="OFFICIAL" Foreground="White" FontSize="9" FontWeight="Bold" />
+                                                    </Border>
+                                                    <!-- Pre-rendered (confirmed price) badge -->
+                                                    <Border Background="#2E7D32" CornerRadius="3" Padding="6,1" Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Visibility="{Binding IsPreRendered, Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="✓ CONFIRMED" Foreground="White" FontSize="9" FontWeight="Bold" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                    <TextBlock Text="{Binding StoreRating}" FontSize="11"
+                                                               Opacity="0.5" Margin="0,0,10,0"
+                                                               Visibility="{Binding StoreRating, Converter={StaticResource NullToVisibility}}" />
+                                                    <Border Background="#34495E" CornerRadius="3" Padding="6,2"
+                                                            Margin="0,0,6,0"
+                                                            Visibility="{Binding Region, Converter={StaticResource NullToVisibility}}">
+                                                        <TextBlock Text="{Binding Region}" Foreground="#BDC3C7"
+                                                                   FontSize="10" />
+                                                    </Border>
+                                                    <Border Background="#2C3E50" CornerRadius="3" Padding="6,2"
+                                                            Visibility="{Binding Edition, Converter={StaticResource NullToVisibility}}">
+                                                        <TextBlock Text="{Binding Edition}" Foreground="#BDC3C7"
+                                                                   FontSize="10" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Coupon (clickable to copy with animation) -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0"
+                                                        Visibility="{Binding CouponCode, Converter={StaticResource NullToVisibility}}">
+                                                <Button Click="CouponButton_Click" Tag="{Binding CouponCode}"
+                                                        Cursor="Hand" ToolTip="Click to copy coupon code"
+                                                        Padding="0" BorderThickness="0" Background="Transparent">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border x:Name="CouponBorder" Background="#1A3A1A" CornerRadius="4" Padding="8,5"
+                                                                    BorderBrush="#2ECC71" BorderThickness="1" SnapsToDevicePixels="True">
+                                                                <Grid>
+                                                                    <!-- Normal state: discount + code + icon -->
+                                                                    <StackPanel x:Name="CouponContent" Orientation="Horizontal">
+                                                                        <TextBlock Text="{Binding CouponDiscount}" Foreground="#2ECC71"
+                                                                                   FontSize="11" FontWeight="Bold" Margin="0,0,6,0" />
+                                                                        <TextBlock Text="{Binding CouponCode}" Foreground="#27AE60"
+                                                                                   FontSize="11" FontFamily="Consolas" />
+                                                                        <TextBlock Text="  📋" Foreground="#2ECC71"
+                                                                                   FontSize="10" VerticalAlignment="Center"
+                                                                                   Margin="4,0,0,0" Opacity="0.7" />
+                                                                    </StackPanel>
+                                                                    <!-- Copied state: checkmark + text -->
+                                                                    <StackPanel x:Name="CopiedContent" Orientation="Horizontal"
+                                                                                HorizontalAlignment="Center" Opacity="0">
+                                                                        <TextBlock Text="✓ Copied!" Foreground="#2ECC71"
+                                                                                   FontSize="11" FontWeight="Bold" />
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="CouponBorder" Property="BorderBrush" Value="#4AE68A" />
+                                                                    <Setter TargetName="CouponBorder" Property="Background" Value="#1F4A1F" />
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                </Button>
+                                            </StackPanel>
+
+                                            <!-- Final Price -->
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                <!-- Original price (strikethrough) when discounted -->
+                                                <TextBlock Text="{Binding OriginalPrice}"
+                                                           FontSize="12" Opacity="0.4"
+                                                           TextAlignment="Right"
+                                                           TextDecorations="Strikethrough"
+                                                           Visibility="{Binding OriginalPrice, Converter={StaticResource NullToVisibility}}" />
+                                                <TextBlock Text="{Binding FinalPrice}"
+                                                           FontSize="20" FontWeight="Bold"
+                                                           Foreground="#2ECC71" MinWidth="70"
+                                                           TextAlignment="Right"
+                                                           Visibility="{Binding FinalPriceValue, Converter={StaticResource NonZeroPriceToVis}}" />
+                                                <TextBlock Text="See on AKS"
+                                                           FontSize="13" Opacity="0.4"
+                                                           TextAlignment="Right">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding FinalPriceValue}" Value="0">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- No prices found -->
+                    <StackPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding SelectedGamePrices.Count}" Value="0" />
+                                            <Condition Binding="{Binding IsLoadingPrices}" Value="False" />
+                                            <Condition Binding="{Binding ShowDetail}" Value="True" />
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="No store offers found" FontSize="15" Opacity="0.5"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="Try viewing on AllKeyShop directly" FontSize="12" Opacity="0.3"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
         </Grid>
 
         <!-- Status Bar -->
@@ -276,7 +450,7 @@
                 <TextBlock Grid.Column="0" Text="{Binding StatusText}" FontSize="12"
                            VerticalAlignment="Center" Opacity="0.7" />
                 <TextBlock Grid.Column="1" FontSize="12" VerticalAlignment="Center" Opacity="0.5"
-                           Text="Auto-refresh: Every 1 hour &#x2022; Source: allkeyshop.com" />
+                           Text="Auto-refresh: Every 1 hour • Source: allkeyshop.com" />
             </Grid>
         </Border>
     </Grid>
